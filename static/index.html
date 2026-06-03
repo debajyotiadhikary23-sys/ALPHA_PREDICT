@@ -1,0 +1,753 @@
+index.html (<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Advanced Stock Analysis Dashboard</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2"></script>
+
+  <style>
+    :root{
+      --bg: #0f0f11;
+      --card: #1e1e1e;
+      --muted: #9aa0a6;
+      --accent: #4B4DED;
+      --text: #e8e8e8;
+      --radius: 10px;
+    }
+    html,body { height:100%; margin:0; font-family: Inter, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    header {
+      height:64px; display:flex; align-items:center; gap:12px; padding:0 18px;
+      background: linear-gradient(90deg, var(--accent), #3a3a9a);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5); color:#fff; font-weight:700;
+    }
+
+    .app {
+      display:flex;
+      height: calc(100vh - 64px);
+      gap:18px;
+      padding:18px;
+      box-sizing:border-box;
+      overflow:hidden;
+    }
+
+    .left {
+      width: 360px;
+      min-width: 220px;
+      max-width: 420px;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+      height:100%;
+      overflow:auto;
+      box-sizing:border-box;
+      padding-right:6px;
+    }
+
+    .right {
+      flex:1;
+      min-width:0;
+      height:100%;
+      display:grid;
+      grid-template-rows: auto 1fr;
+      gap:16px;
+      overflow:auto;
+      box-sizing:border-box;
+    }
+
+    .card, .input-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding:14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-sizing:border-box;
+    }
+
+    h3, h4 { margin:0 0 10px 0; font-weight:700; }
+    label { font-size:13px; color:var(--muted); display:block; margin-top:8px; }
+
+    input, select, button {
+      width:100%; padding:9px 10px; margin-top:6px; border-radius:8px;
+      border:1px solid rgba(255,255,255,0.04); background:#111; color:var(--text); box-sizing:border-box;
+      font-size:14px;
+    }
+    button { background: linear-gradient(90deg,var(--accent), #6a5bff); border:none; color:#fff; font-weight:700; cursor:pointer; }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .controls { display:flex; gap:8px; }
+    .controls button { flex:1; padding:10px; }
+
+    .snapshot-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .stat { padding:10px; border-radius:8px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); }
+    .val { font-weight:700; font-size:18px; margin-top:6px; }
+
+    .risk-meter { height:12px; background:rgba(255,255,255,0.03); border-radius:12px; overflow:hidden; margin-top:8px; }
+    .risk-fill { height:100%; width:12%; background: linear-gradient(90deg,#00d27a,#ffb000); }
+
+    .badge { display:inline-block; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.02); color:var(--text); font-weight:600; font-size:13px; }
+
+    .quick-summary { font-size:13px; color:#cfcfd1; line-height:1.45; }
+
+    .overview-row { display:flex; gap:12px; flex-wrap:wrap; }
+    .overview-item { flex:1; min-width:150px; padding:12px; background:#222; border-radius:8px; text-align:center; }
+
+    .decision { padding:12px; border-radius:8px; text-align:center; font-size:16px; font-weight:700; }
+    .decision.buy { background:#198754; color:white; }
+    .decision.hold { background:#ffc107; color:black; }
+    .decision.sell { background:#dc3545; color:white; }
+
+    .main-grid {
+      display:grid;
+      grid-template-columns: 1fr 420px;
+      gap:16px;
+      align-items:start;
+      min-height:0;
+    }
+
+    @media (max-width:1100px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    .chart-stack { display:flex; flex-direction:column; gap:12px; min-height:0; }
+
+    .chart-card { padding:12px; border-radius:8px; background:var(--card); min-height: 240px; box-sizing:border-box; }
+    canvas { width:100% !important; height:260px !important; display:block; }
+
+    table { width:100%; border-collapse:collapse; color:#ddd; font-size:14px; }
+    th, td { padding:8px; border-bottom:1px solid rgba(255,255,255,0.03); text-align:left; }
+    th { background: linear-gradient(90deg, var(--accent), #3a3a9a); color:white; }
+
+    .reason-list { list-style:none; margin:0; padding:0; }
+    .reason-list li { background:#2a2a2a; padding:10px; margin-bottom:8px; border-radius:6px; color:#e8e8e8; }
+
+    .left::-webkit-scrollbar, .right::-webkit-scrollbar { width:10px; height:10px; }
+    .left::-webkit-scrollbar-thumb, .right::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.03); border-radius:6px; }
+
+    .news-item a { color:#60a5fa; text-decoration:none; }
+    .news-item a:hover { text-decoration:underline; }
+    .company-label { font-size:12px; color:var(--muted); margin-top:4px; }
+
+    #errorBanner {
+      display:none;
+      margin-bottom:8px;
+      padding:8px 10px;
+      border-radius:6px;
+      background:rgba(220,53,69,0.15);
+      color:#fca5a5;
+      font-size:13px;
+    }
+
+    /* ---- Ticker suggestions dropdown ---- */
+    .ticker-wrapper {
+      position: relative;
+      margin-top:6px;
+    }
+    .suggestions {
+      position:absolute;
+      top:100%;
+      left:0;
+      right:0;
+      background:#111827;
+      border-radius:8px;
+      margin-top:4px;
+      max-height:260px;
+      overflow:auto;
+      box-shadow:0 10px 25px rgba(0,0,0,0.6);
+      z-index:20;
+      display:none;
+    }
+    .suggestion-item {
+      padding:8px 10px;
+      border-bottom:1px solid rgba(255,255,255,0.03);
+      cursor:pointer;
+      display:flex;
+      flex-direction:column;
+    }
+    .suggestion-item:hover {
+      background:#1f2933;
+    }
+    .suggestion-symbol {
+      font-size:13px;
+      font-weight:600;
+    }
+    .suggestion-name {
+      font-size:12px;
+      color:#9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:36px;height:36px;border-radius:8px;background:white;color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800">AS</div>
+      Alpha Predict Dashboard
+    </div>
+  </header>
+
+  <div class="app">
+    <!-- LEFT -->
+    <div class="left">
+      <div class="input-card card">
+        <h3>Stock Analysis Input</h3>
+        <label>Stock Ticker:</label>
+        <div class="ticker-wrapper">
+          <input id="ticker" type="text" placeholder="Type name or symbol (e.g. RELIANCE, TCS)" autocomplete="off" />
+          <div id="tickerSuggestions" class="suggestions"></div>
+        </div>
+
+        <div id="companyName" class="company-label"></div>
+
+        <label>Own this stock?</label>
+        <select id="ownStock">
+          <option value="No">No</option>
+          <option value="Yes">Yes</option>
+        </select>
+
+        <div id="ownInputs" style="display:none">
+          <label>Avg Price</label>
+          <input id="avgPrice" type="number" placeholder="e.g. 410.10" />
+          <label>Quantity</label>
+          <input id="quantity" type="number" placeholder="e.g. 20" />
+          <label>Hold Plan</label>
+          <select id="holdPlan">
+            <option>Short-term</option>
+            <option selected>Mid-term</option>
+            <option>Long-term</option>
+          </select>
+        </div>
+
+        <label>Horizon</label>
+        <select id="horizon">
+          <option value="short-term">&lt; 6 months</option>
+          <option value="mid-term">6–12 months</option>
+          <option value="long-term">1–2 years</option>
+          <option value="xlong">2+ years</option>
+        </select>
+
+        <div class="controls" style="margin-top:10px">
+          <button id="runBtn">Run Analysis</button>
+          <button id="downloadCsv" style="background:#222;border:1px solid rgba(255,255,255,0.04)">CSV</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>Current Stock Snapshot</h4>
+        <div class="snapshot-grid">
+          <div class="stat">
+            <div style="font-size:12px;color:var(--muted)">Last / Today Close</div>
+            <div class="val" id="snap_last">—</div>
+            <div style="font-size:12px;color:var(--muted)" id="snap_change">—</div>
+          </div>
+          <div class="stat">
+            <div style="font-size:12px;color:var(--muted)">52W High / Low</div>
+            <div class="val">
+              <span id="snap_high">—</span> / <span id="snap_low">—</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted)" id="snap_mcap">Market Cap: —</div>
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <canvas id="sparkline" style="height:64px;"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>Risk & Tags</h4>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div style="flex:1">
+            <div style="font-size:12px;color:var(--muted)">Risk Level</div>
+            <div class="risk-meter"><div id="risk_fill" class="risk-fill"></div></div>
+            <div style="margin-top:8px;font-weight:700" id="risk_label">Low</div>
+          </div>
+          <div style="width:120px;display:flex;flex-direction:column;align-items:flex-end">
+            <div class="badge" id="badge_cap">—</div>
+            <div class="badge" id="badge_vol">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>Quick AI Summary</h4>
+        <div id="quick_summary" class="quick-summary">No analysis run yet. Enter ticker and click Run Analysis.</div>
+      </div>
+
+      <div class="card">
+        <h4>Latest Headlines</h4>
+        <ul id="news_list" style="list-style:none;padding:0;margin:0">
+          <li style="padding:10px;background:rgba(255,255,255,0.015);border-radius:6px">No news available.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h4>Price Stats (Today)</h4>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+          <div style="background:rgba(255,255,255,0.02);padding:8px;border-radius:6px">
+            <div style="font-size:12px;color:var(--muted)">Open</div>
+            <div id="stat_open">—</div>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.02);padding:8px;border-radius:6px">
+            <div style="font-size:12px;color:var(--muted)">Prev Close</div>
+            <div id="stat_prevclose">—</div>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.02);padding:8px;border-radius:6px">
+            <div style="font-size:12px;color:var(--muted)">Volume</div>
+            <div id="stat_vol">—</div>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.02);padding:8px;border-radius:6px">
+            <div style="font-size:12px;color:var(--muted)">Lower Circuit (≈ -5%)</div>
+            <div id="stat_lc">—</div>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.02);padding:8px;border-radius:6px">
+            <div style="font-size:12px;color:var(--muted)">Upper Circuit (≈ +5%)</div>
+            <div id="stat_uc">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="right">
+      <!-- error banner -->
+      <div id="errorBanner"></div>
+
+      <!-- top overview & decision -->
+      <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <div class="overview-row">
+          <div class="overview-item">
+            <div style="font-size:13px;color:var(--muted)">Forecast Price</div>
+            <div style="font-weight:800;font-size:18px" id="price">-</div>
+          </div>
+          <div class="overview-item">
+            <div style="font-size:13px;color:var(--muted)">Forecast Date</div>
+            <div id="forecastDate">-</div>
+          </div>
+          <div class="overview-item">
+            <div style="font-size:13px;color:var(--muted)">Composite Score</div>
+            <div id="score" style="font-weight:800;font-size:18px">-</div>
+          </div>
+          <div class="overview-item">
+            <div style="font-size:13px;color:var(--muted)">Model Confidence</div>
+            <div id="modelConfidence" style="font-weight:800;font-size:16px">-</div>
+          </div>
+        </div>
+
+        <div id="decision-card" class="decision hold">No analysis yet.</div>
+      </div>
+
+      <!-- main area: left big charts, right small panels -->
+      <div class="main-grid">
+        <!-- left: big chart stack -->
+        <div class="chart-stack">
+          <div class="chart-card">
+            <h4 style="margin-bottom:8px">Factor Radar Chart</h4>
+            <canvas id="radarChart"></canvas>
+          </div>
+
+          <div class="chart-card">
+            <h4 style="margin-bottom:8px">Price Chart (MA20 + MA50)</h4>
+            <canvas id="priceChart"></canvas>
+          </div>
+          <div class="chart-card">
+            <h4 style="margin-bottom:8px">Advanced Candlestick Chart</h4>
+            <canvas id="candlestickChart" style="height:320px !important;"></canvas>
+          </div>
+
+        </div>
+
+        <!-- right small column -->
+        <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+          <div class="card" style="min-height:120px">
+            <h4>Factor Summary</h4>
+            <table>
+              <thead><tr><th>Factor</th><th>Score</th><th>Status</th></tr></thead>
+              <tbody id="factorTable"></tbody>
+            </table>
+          </div>
+
+          <div class="card" style="min-height:120px; display:flex;flex-direction:column;justify-content:space-between">
+            <h4>Reasons for Decision</h4>
+            <ul id="reasonsList" class="reason-list"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const el = id => document.getElementById(id);
+
+  let radarInstance = null;
+  let priceInstance = null;
+  let sparkInstance = null;
+
+  let currentYFSymbol = null;   // full symbol like RELIANCE.NS
+  let suggestTimer = null;
+
+  function showError(msg) {
+    const b = el('errorBanner');
+    b.textContent = msg;
+    b.style.display = 'block';
+  }
+  function clearError() {
+    const b = el('errorBanner');
+    b.textContent = '';
+    b.style.display = 'none';
+  }
+
+  el('ownStock').addEventListener('change', e => {
+    el('ownInputs').style.display = (e.target.value === 'Yes') ? 'block' : 'none';
+  });
+  
+  function createCandlestick(dates, opens, highs, lows, closes) {
+
+    const canvas = document.getElementById('candlestickChart');
+    if (!canvas) {
+      console.error("❌ candlestick canvas not found");
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+
+    if (candleChart) candleChart.destroy();
+
+    const data = dates.map((d, i) => ({
+      x: new Date(d),
+      o: opens[i],
+      h: highs[i],
+      l: lows[i],
+      c: closes[i]
+    }));
+
+    candleChart = new Chart(ctx, {
+      type: 'candlestick',
+      data: {
+        datasets: [{
+          label: 'Price',
+          data: data
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    });
+  }
+  // ---------- Ticker suggestions (live from backend /search_tickers) ----------
+  const tickerInput = el('ticker');
+  const suggestionBox = el('tickerSuggestions');
+
+  function renderSuggestions(items) {
+    suggestionBox.innerHTML = '';
+    if (!items.length) {
+      suggestionBox.style.display = 'none';
+      return;
+    }
+    items.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'suggestion-item';
+      div.dataset.symbol = item.symbol;                      // RELIANCE.NS
+      div.dataset.displaySymbol = item.displaySymbol || item.symbol;
+      div.dataset.name = item.name || '';
+      div.dataset.exchange = item.exchange || '';
+      div.innerHTML = `
+        <span class="suggestion-symbol">${div.dataset.displaySymbol} • ${div.dataset.exchange}</span>
+        <span class="suggestion-name">${div.dataset.name}</span>
+      `;
+      div.addEventListener('click', () => {
+        tickerInput.value = div.dataset.displaySymbol;       // show clean code
+        currentYFSymbol = div.dataset.symbol;                // send full code to backend
+        el('companyName').textContent = div.dataset.name
+          ? `${div.dataset.name} (${div.dataset.displaySymbol}) ${div.dataset.exchange ? '• '+div.dataset.exchange : ''}`
+          : '';
+        suggestionBox.style.display = 'none';
+      });
+      suggestionBox.appendChild(div);
+    });
+    suggestionBox.style.display = 'block';
+  }
+
+  async function fetchSuggestions(q) {
+    try {
+      const res = await fetch('/search_tickers?q=' + encodeURIComponent(q));
+      if (!res.ok) return;
+      const data = await res.json();
+      renderSuggestions(data.results || []);
+    } catch (err) {
+      console.error('suggestions error', err);
+    }
+  }
+
+  tickerInput.addEventListener('input', () => {
+    currentYFSymbol = null; // user editing again
+    const q = tickerInput.value.trim();
+    if (!q) {
+      suggestionBox.style.display = 'none';
+      el('companyName').textContent = '';
+      return;
+    }
+    if (suggestTimer) clearTimeout(suggestTimer);
+    suggestTimer = setTimeout(() => fetchSuggestions(q), 250);
+  });
+
+  document.addEventListener('click', e => {
+    if (!suggestionBox.contains(e.target) && e.target !== tickerInput) {
+      suggestionBox.style.display = 'none';
+    }
+  });
+
+  // ---------- Charts helpers ----------
+  function createRadar(scores) {
+    const labels = Object.keys(scores || {"Momentum":50,"Profitability":50,"Quality":50,"Sentiment":50,"Valuation":50});
+    const data = labels.map(l => scores[l] ?? 50);
+    const ctx = el('radarChart').getContext('2d');
+    if (radarInstance) radarInstance.destroy();
+    radarInstance = new Chart(ctx, {
+      type:'radar',
+      data: { labels: labels, datasets:[{ label:'Scores', data:data, backgroundColor:'rgba(75,77,237,0.12)', borderColor:'#4B4DED', pointBackgroundColor:'#4B4DED' }]},
+      options: { responsive:true, maintainAspectRatio:false, scales:{ r:{ suggestedMin:0, suggestedMax:100, ticks:{display:false} } }, plugins:{legend:{display:false}} }
+    });
+  }
+
+  function createPriceChart(dates, ma20, ma50) {
+    const ctx = el('priceChart').getContext('2d');
+    if (priceInstance) priceInstance.destroy();
+    priceInstance = new Chart(ctx, {
+      type:'line',
+      data: { labels: dates, datasets:[
+        { label:'MA20', data: ma20, borderColor:'#FF5733', fill:false, tension:0.2 },
+        { label:'MA50', data: ma50, borderColor:'#33C1FF', fill:false, tension:0.2 }
+      ]},
+      options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{x:{ticks:{color:'#ddd'}}, y:{ticks:{color:'#ddd'}}} }
+    });
+  }
+
+  function createSpark(dates, closes) {
+    const ctx = el('sparkline').getContext('2d');
+    if (sparkInstance) sparkInstance.destroy();
+    sparkInstance = new Chart(ctx, {
+      type:'line',
+      data: { labels: dates.slice(-10), datasets:[{ data: closes.slice(-10), borderColor:'#6a5bff', backgroundColor:'rgba(106,91,255,0.12)', fill:true, pointRadius:1, tension:0.3 }]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{display:false}} }
+    });
+  }
+
+  function updateUIFromData(data) {
+    clearError();
+
+    const decisionRaw = (data.decision || 'HOLD').toUpperCase();
+
+    if (data.company && data.company.name) {
+      const symbol = data.company.symbol || '';
+      const exch = data.company.exchange || '';
+      el('companyName').textContent = `Company: ${data.company.name} ${symbol ? '('+symbol+')' : ''} ${exch ? ' • '+exch : ''}`;
+      document.title = data.company.name + ' – Advanced Stock Analysis Dashboard';
+    } else {
+      document.title = 'Advanced Stock Analysis Dashboard';
+    }
+
+    const forecast_price = data.forecast_price ?? data.current_price ?? (data.price_history && data.price_history.closes ? data.price_history.closes.slice(-1)[0] : null);
+    el('price').innerText = forecast_price ? '₹' + Number(forecast_price).toFixed(2) : '-';
+    el('forecastDate').innerText = data.forecast_date ?? '-';
+    el('score').innerText = data.score !== undefined ? (data.score + '/100') : '-';
+    el('modelConfidence').innerText = data.model_confidence || '-';
+
+    let decClass = 'hold';
+    if (decisionRaw === 'BUY') decClass = 'buy';
+    else if (decisionRaw === 'SELL') decClass = 'sell';
+    el('decision-card').className = 'decision ' + decClass;
+
+    const primaryRec = data.recommendation_primary || ('Model decision: ' + decisionRaw);
+    el('decision-card').innerText = primaryRec;
+
+    const ph = data.price_history || null;
+    let dates = [], closes = [], ma20 = [], ma50 = [];
+    if (ph && ph.dates && ph.closes) {
+      dates = ph.dates;
+      closes = ph.closes.map(Number);
+      ma20 = (ph.ma20 || closes).map(Number);
+      ma50 = (ph.ma50 || closes).map(Number);
+    }
+
+    createRadar(data.group_scores || {"Momentum":50,"Profitability":50,"Quality":50,"Sentiment":50,"Valuation":50});
+    createPriceChart(dates.slice(-200), ma20.slice(-200), ma50.slice(-200));
+    createSpark(dates, closes);
+
+    const ls = data.live_stats || {};
+    const currency = ls.currency || '₹';
+
+    const todayClose = ls.today_close ?? (closes.length ? closes[closes.length - 1] : null);
+    const prev = ls.prev_close ?? (closes.length > 1 ? closes[closes.length - 2] : todayClose);
+
+    if (todayClose != null) {
+      el('snap_last').innerText = currency + Number(todayClose).toFixed(2);
+      const pct = (prev && prev !== 0) ? ((todayClose - prev) / prev * 100) : 0;
+      el('snap_change').innerText = (pct >= 0 ? '▲ ' : '▼ ') + pct.toFixed(2) + '% vs last close';
+    } else {
+      el('snap_last').innerText = '—';
+      el('snap_change').innerText = '—';
+    }
+
+    if (ls.fifty_two_week_high != null && ls.fifty_two_week_low != null) {
+      el('snap_high').innerText = currency + Number(ls.fifty_two_week_high).toFixed(2);
+      el('snap_low').innerText = currency + Number(ls.fifty_two_week_low).toFixed(2);
+    } else if (closes.length) {
+      el('snap_high').innerText = currency + Math.max(...closes).toFixed(2);
+      el('snap_low').innerText = currency + Math.min(...closes).toFixed(2);
+    } else {
+      el('snap_high').innerText = '—';
+      el('snap_low').innerText = '—';
+    }
+
+    el('stat_open').innerText =
+      ls.today_open != null ? currency + Number(ls.today_open).toFixed(2) : '—';
+    el('stat_prevclose').innerText =
+      ls.prev_close != null ? currency + Number(ls.prev_close).toFixed(2) : '—';
+    el('stat_vol').innerText =
+      ls.today_volume != null ? Number(ls.today_volume).toLocaleString() : '—';
+    el('stat_lc').innerText =
+      ls.lower_circuit != null ? currency + Number(ls.lower_circuit).toFixed(2) : '—';
+    el('stat_uc').innerText =
+      ls.upper_circuit != null ? currency + Number(ls.upper_circuit).toFixed(2) : '—';
+
+    if (ls.market_cap != null) {
+      const mc = Number(ls.market_cap);
+      let label = mc.toLocaleString();
+      if (mc >= 1e12) label = (mc/1e12).toFixed(2) + ' T';
+      else if (mc >= 1e9) label = (mc/1e9).toFixed(2) + ' B';
+      else if (mc >= 1e7) label = (mc/1e7).toFixed(2) + ' Cr';
+      el('snap_mcap').innerText = 'Market Cap: ' + label;
+    } else {
+      el('snap_mcap').innerText = 'Market Cap: —';
+    }
+
+    const tbody = el('factorTable'); tbody.innerHTML = '';
+    const groups = data.group_scores || {"Momentum":50,"Profitability":50,"Quality":50,"Sentiment":50,"Valuation":50};
+    for (const [k,v] of Object.entries(groups)) {
+      const status = v >= 75 ? 'GOOD' : v >= 45 ? 'AVERAGE' : 'POOR';
+      tbody.innerHTML += `<tr><td>${k}</td><td>${v}</td><td><span class="badge">${status}</span></td></tr>`;
+    }
+
+    const rl = el('reasonsList'); rl.innerHTML = '';
+    if (data.reasons && data.reasons.length) {
+      data.reasons.forEach(r => rl.innerHTML += `<li>${r}</li>`);
+    } else rl.innerHTML = '<li>No specific reasons found.</li>';
+
+    const quality = groups.Quality ?? 50;
+    const riskPct = Math.max(6, Math.min(96, 100 - quality));
+    el('risk_fill').style.width = riskPct + '%';
+    el('risk_label').innerText =
+      riskPct < 25 ? 'Low' :
+      riskPct < 50 ? 'Moderate' :
+      riskPct < 75 ? 'High' : 'Very High';
+    el('badge_cap').innerText = (dates.length>250) ? 'Large Cap' : (dates.length>60 ? 'Established' : 'Thin History');
+    el('badge_vol').innerText = quality >= 60 ? 'Low Vol' : (quality >= 40 ? 'Med Vol' : 'High Vol');
+
+    const qs = [];
+    qs.push(primaryRec);
+    if (Array.isArray(data.recommendation_options)) {
+      data.recommendation_options.forEach(o => qs.push(o));
+    }
+    if (data.score !== undefined) qs.push('Composite score: ' + data.score + '/100');
+    if (data.strategy_summary) {
+      qs.push(`<span style="font-size:11px;color:#9ca3af;">Strategy note: ${data.strategy_summary}</span>`);
+    }
+    el('quick_summary').innerHTML = qs.map(s => `<div style="margin-bottom:6px">${s}</div>`).join('');
+
+    const newsList = el('news_list');
+    newsList.innerHTML = '';
+    if (Array.isArray(data.news) && data.news.length) {
+      data.news.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'news-item';
+        li.style.padding = '10px';
+        li.style.marginBottom = '6px';
+        li.style.background = 'rgba(255,255,255,0.015)';
+        li.style.borderRadius = '6px';
+        li.innerHTML = `
+          <div style="font-size:13px;font-weight:600;margin-bottom:3px;">
+            <a href="${item.link}" target="_blank" rel="noopener noreferrer">${item.title}</a>
+          </div>
+          <div style="font-size:11px;color:#9ca3af;">${item.source || ''}</div>
+        `;
+        newsList.appendChild(li);
+      });
+    } else {
+      newsList.innerHTML = '<li style="padding:10px;background:rgba(255,255,255,0.015);border-radius:6px">No news available.</li>';
+    }
+  }
+
+  el('runBtn').addEventListener('click', async () => {
+    const rawInput = tickerInput.value.trim();
+    const tickerToSend = currentYFSymbol || rawInput;
+    if (!tickerToSend) { alert('Enter ticker'); return; }
+
+    el('runBtn').disabled = true; el('runBtn').innerText = 'Running...';
+    clearError();
+    suggestionBox.style.display = 'none';
+
+    const payload = {
+      ticker: tickerToSend,
+      ownStock: el('ownStock').value,
+      avgPrice: Number(el('avgPrice').value) || 0,
+      quantity: Number(el('quantity').value) || 0,
+      holdPlan: el('holdPlan') ? el('holdPlan').value : null,
+      horizon: el('horizon') ? el('horizon').value : null,
+      chart_range: '1y'
+    };
+    try {
+      const res = await fetch('/analyze', { method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error(txt);
+        showError('Server error: ' + res.status);
+        return;
+      }
+      const data = await res.json();
+      if (!data.current_price && data.forecast_price) data.current_price = data.forecast_price;
+      updateUIFromData(data);
+    } catch (err) {
+      console.error(err);
+      showError('Network or server error. Please try again.');
+    } finally {
+      el('runBtn').disabled = false; el('runBtn').innerText = 'Run Analysis';
+    }
+  });
+
+  el('downloadCsv').addEventListener('click', () => { window.location.href = '/predictions.csv'; });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const ctxR = document.getElementById('radarChart').getContext('2d');
+    radarInstance = new Chart(ctxR, {
+      type:'radar',
+      data:{labels:["Momentum","Profitability","Quality","Sentiment","Valuation"],datasets:[{data:[50,50,50,50,50],backgroundColor:'rgba(75,77,237,0.12)',borderColor:'#4B4DED'}]},
+      options:{responsive:true,maintainAspectRatio:false,scales:{r:{suggestedMin:0,suggestedMax:100,ticks:{display:false}}},plugins:{legend:{display:false}}}
+    });
+    const ctxP = document.getElementById('priceChart').getContext('2d');
+    priceInstance = new Chart(ctxP, {
+      type:'line',
+      data:{labels:[],datasets:[{label:'MA20',data:[],borderColor:'#FF5733',fill:false},{label:'MA50',data:[],borderColor:'#33C1FF',fill:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{ticks:{color:'#ddd'}},y:{ticks:{color:'#ddd'}}}}
+    });
+    const ctxS = document.getElementById('sparkline').getContext('2d');
+    sparkInstance = new Chart(ctxS, {
+      type:'line',
+      data:{labels:[],datasets:[{data:[],borderColor:'#6a5bff',backgroundColor:'rgba(106,91,255,0.12)',fill:true,pointRadius:1,tension:0.3}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
+    });
+  });
+</script>
+</body>
+</html>
