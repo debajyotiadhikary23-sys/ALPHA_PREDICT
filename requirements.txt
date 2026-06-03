@@ -1,0 +1,10 @@
+Flask>=2.0
+flask-cors
+flask-caching
+pandas
+numpy
+yfinance
+scikit-learn
+pytest
+matplotlib
+shap
